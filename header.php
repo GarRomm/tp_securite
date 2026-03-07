@@ -1,5 +1,19 @@
 <?php
+// FAILLE : Session sans options de securite (OWASP A07:2021 - Authentication Failures)
+// Le cookie de session pouvait etre vole via JS (XSS), envoye vers des sites tiers
+// (CSRF) ou lu dans l'URL. On configure les options AVANT session_start().
+// Source OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+//
+// Ancien code vulnerable :
+// session_start();
+
+ini_set('session.cookie_httponly', 1);    // Cookie illisible par JavaScript
+ini_set('session.cookie_samesite', 'Strict'); // Cookie non envoye depuis un site tiers
+ini_set('session.use_strict_mode', 1);   // Rejette les IDs de session non generes par le serveur
+ini_set('session.use_only_cookies', 1);  // Interdit l'ID de session dans l'URL
+
 session_start();
+
 require_once __DIR__ . '/init.php';
 $me = current_user();
 ?>
@@ -39,15 +53,15 @@ td{padding:8px;border:1px solid #ddd}
 </head>
 <body>
 <nav>
-  <span class="brand">🛒 VulnShop</span>
+  <span class="brand">VulnShop</span>
   <a href="index.php">Accueil</a>
   <a href="search.php">Recherche</a>
   <?php if ($me): ?>
     <a href="profile.php">Mon profil</a>
     <a href="messages.php">Messages</a>
     <?php if ($me['role']==='admin'): ?><a href="admin.php">Admin</a><?php endif; ?>
-    <span class="user">👤 <?= htmlspecialchars($me['username']) ?> — <?= number_format($me['balance'],2) ?>€</span>
-    <a href="logout.php">Déco</a>
+    <span class="user">👤 <?= htmlspecialchars($me['username']) ?> — <?= number_format($me['balance'],2) ?>EUR</span>
+    <a href="logout.php">Déconnexion</a>
   <?php else: ?>
     <a href="login.php">Connexion</a>
     <a href="register.php">Inscription</a>
