@@ -21,10 +21,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (isset($_FILES['image']) && $_FILES['image']['error'] === 0) {
 
                 // FAILLE : Upload de fichier arbitraire (OWASP A04:2021 - Insecure Design)
-                // Le code original utilisait le nom de fichier fourni par l'utilisateur
-                // sans aucune validation. Un attaquant pouvait uploader "shell.php" et
-                // l'executer via /uploads/shell.php pour prendre le controle du serveur
-                // (Remote Code Execution). Aucune limite de taille, aucun controle de type.
+                // $_FILES['image']['name'] utilise directement = RCE garanti.
+                // Uploader "shell.php" puis appeler /uploads/shell.php suffisait
+                // pour executer du code arbitraire sur le serveur.
                 // Source OWASP : https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
                 //
                 // Ancien code vulnerable :
@@ -47,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         // Nom aleatoire : l'utilisateur n'a aucun controle sur le nom final
                         $safe_filename = bin2hex(random_bytes(16)) . '.' . $ext;
                         $upload_dir    = __DIR__ . '/uploads/';
+                        // Cree le dossier uploads/ s'il n'existe pas encore (permissions 755)
                         if (!is_dir($upload_dir)) {
                             mkdir($upload_dir, 0755, true);
                         }

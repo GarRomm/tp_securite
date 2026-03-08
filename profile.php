@@ -5,10 +5,13 @@ $me = require_login();
 
 csrf_check();
 
-// FAILLE 1 : IDOR + Injection SQL via $uid (OWASP A01:2021 + A03:2021)
-// $uid venait de $_GET sans validation. Un attaquant pouvait injecter du SQL
-// ou acceder au profil de n'importe quel utilisateur en devinant son ID.
-// Source OWASP : https://owasp.org/www-community/attacks/Insecure_Direct_Object_Reference
+// FAILLE 1 : Injection SQL via $uid (OWASP A03:2021)
+// $uid venait de $_GET et etait colle directement dans la requete.
+// La consultation d'un profil par uid reste volontairement publique (feature).
+// Ce qui est protege : les actions d'ecriture (update, password, delete)
+// sont restreintes au proprietaire via $is_own.
+// L'injection SQL etait la vraie faille : corriger avec intval() + requete preparee.
+// Source OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 //
 // Ancien code vulnerable :
 // $uid  = $_GET['uid'] ?? $me['id'];

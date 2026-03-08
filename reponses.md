@@ -1,301 +1,374 @@
-# Réponses — Corrections de sécurité VulnShop
+# Corrections de sécurité — VulnShop
 
-Ce fichier récapitule toutes les failles corrigées dans le projet, fichier par fichier.
-Pour chaque correction, les numéros de lignes indiqués correspondent au fichier tel qu'il est maintenant (après correction).
+Récap de toutes les failles corrigées, fichier par fichier.
+Les numéros de lignes correspondent au fichier corrigé.
 
 ---
 
 ## header.php
 
-### Faille (L2) — Session sans options de sécurité (OWASP A07:2021)
+### session_start() sans options de sécurité — A07:2021
 
-Le `session_start()` de base ne configurait rien. Du coup le cookie de session était lisible par JavaScript, pouvait être envoyé vers des sites tiers, et l'ID de session pouvait même passer dans l'URL.
+Sans config, le cookie de session est lisible par JS, transmissible cross-site, et l'ID peut passer dans l'URL.
 
-**Correction (L11-15)** : avant d'appeler `session_start()`, on configure maintenant les options critiques :
-- `cookie_httponly` : le cookie ne peut plus être lu par JavaScript, donc un XSS ne peut plus voler la session directement
-- `cookie_samesite Strict` : le cookie n'est pas envoyé si la requête vient d'un autre site (protection CSRF)
-- `use_strict_mode` : les IDs de session inventés par l'attaquant sont refusés
-- `use_only_cookies` : l'ID de session ne peut plus passer en paramètre GET dans l'URL
+**Correction (L11-15)** — 4 options avant `session_start()` :
+- `cookie_httponly` : JS ne peut plus lire le cookie → XSS ne vole plus la session
+- `cookie_samesite Strict` : cookie bloqué sur les requêtes cross-site → protection CSRF
+- `use_strict_mode` : IDs de session forgés par l'attaquant rejetés
+- `use_only_cookies` : ID de session interdit dans l'URL
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
 
 ---
 
 ## logout.php
 
-### Faille (L2) — session_start() sans options de sécurité (OWASP A07:2021)
+### session_start() sans options de sécurité — A07:2021
 
-Même problème que header.php : le `session_start()` brut ne configurait rien.
+Même problème que header.php.
 
-**Correction (L7)** : utilisation de `secure_session_start()` définie dans init.php, qui applique les mêmes options de sécurité que dans header.php avant de démarrer la session.
+**Correction (L7)** — `secure_session_start()` définie dans init.php, applique les mêmes options avant de démarrer la session.
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
 
 ---
 
 ## init.php
 
-### Faille 1 (L63) — Mots de passe hachés avec MD5 (OWASP A02:2021)
+### Faille 1 — Mots de passe hachés en MD5 — A02:2021
 
-Les mots de passe des comptes de démo étaient stockés avec `md5()`. MD5 est conçu pour être rapide : un attaquant qui vole la base de données retrouve les mots de passe en quelques secondes via des rainbow tables ou du matériel dédié.
+MD5 est rapide par conception : les hashs des comptes de démo se craquent en quelques secondes sur crackstation.net ou avec du matériel dédié.
 
-**Correction (L73-77)** : remplacement de `md5()` par `password_hash($pass, PASSWORD_BCRYPT)`. BCrypt est lent par conception et intègre automatiquement un sel aléatoire, ce qui rend le cassage en masse impossible même avec les bases de hashs connues.
+**Correction (L73-77)** — `password_hash($pass, PASSWORD_BCRYPT)`. BCrypt est lent par design et intègre un sel aléatoire automatique, ce qui rend le cassage en masse inutilisable même avec des rainbow tables.
 
-### Faille 2 (L139) — session_start() sans options de sécurité dans api.php et logout.php (OWASP A07:2021)
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 
-Ces deux fichiers appelaient `session_start()` directement sans aucune option.
+### Faille 2 — session_start() sans options dans api.php et logout.php — A07:2021
 
-**Correction (L149-157)** : ajout de la fonction `secure_session_start()` qui centralise la configuration de sécurité de session (httponly, samesite, strict_mode, only_cookies) puis appelle `session_start()`. Tous les points d'entrée utilisent maintenant cette fonction.
+Ces fichiers appelaient `session_start()` brut.
 
-**Bonus** : ajout des fonctions `csrf_token()`, `csrf_field()` et `csrf_check()` (L119-137) pour la protection CSRF sur tous les formulaires.
+**Correction (L149-157)** — Fonction `secure_session_start()` centralisée ici : httponly, samesite, strict_mode, only_cookies, puis `session_start()`. Un seul endroit à maintenir.
+
+**Bonus (L119-137)** — Ajout de `csrf_token()`, `csrf_field()` et `csrf_check()` pour protéger tous les formulaires POST.
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
 
 ---
 
 ## login.php
 
-### Faille 1 (L13) — Injection SQL (OWASP A03:2021)
+### Faille 1 — Injection SQL — A03:2021
 
-Le `$username` était collé directement dans la requête SQL. En saisissant `' OR '1'='1`, la condition devenait toujours vraie et on se connectait sans mot de passe.
+`$username` collé directement dans la requête. Saisir `' OR '1'='1` bypasse l'authentification sans mot de passe.
 
-**Correction (L21-23)** : requête préparée avec un `?` et `execute([$username])`. Le username n'est plus jamais interprété comme du SQL.
+**Correction (L21-23)** — Requête préparée avec `?` + `execute([$username])`.
 
-### Faille 2 (L26) — Mot de passe haché avec MD5 (OWASP A02:2021)
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-La vérification utilisait `md5($password)` directement dans la requête SQL, combinant la faille d'injection et la faille cryptographique en une seule ligne.
+### Faille 2 — MD5 pour la vérification du mot de passe — A02:2021
 
-**Correction (L34)** : `password_verify($password, $user['password'])`. On récupère d'abord le compte par username seul, puis on vérifie le mot de passe côté PHP avec BCrypt.
+`md5($password)` injecté directement dans la requête SQL : deux failles en une ligne.
 
-**Bonus (L36)** : `session_regenerate_id(true)` après connexion réussie pour empêcher la fixation de session.
+**Correction (L34)** — `password_verify($password, $user['password'])` côté PHP après récupération du compte par username seul.
 
-### Faille 3 (L63) — Credentials exposés dans le HTML (OWASP A07:2021)
+**Bonus (L36)** — `session_regenerate_id(true)` après login pour bloquer la fixation de session.
 
-Les identifiants de tous les comptes (`alice/alice123`, `bob/bob123`, `admin/admin`) étaient affichés en clair dans la page de connexion. Visible à tout le monde avec F12.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 
-**Correction** : commentaire conservé pour montrer ce qui a été supprimé, mais le code HTML qui affichait les credentials a été retiré.
+### Faille 3 — Credentials en clair dans le HTML — A07:2021
+
+`alice/alice123`, `bob/bob123`, `admin/admin` affichés dans la page. Visible en F12 par n'importe qui.
+
+**Correction** — Code HTML supprimé. Les credentials sont conservés dans le README uniquement pour l'installation du TP, avec une mention explicite.
+
+Réf. OWASP : https://owasp.org/Top10/A07_2021-Identification_and_Authentication_Failures/
 
 ---
 
 ## register.php
 
-### Faille (L16) — Mot de passe haché avec MD5 (OWASP A02:2021)
+### MD5 pour le stockage du mot de passe — A02:2021
 
-Même problème que login.php : l'inscription stockait le mot de passe avec `md5()`.
+Même problème que login.php.
 
-**Correction (L20-27)** : `password_hash($p, PASSWORD_BCRYPT)` à la place de `md5($p)`. En plus, ajout d'une validation de longueur minimale de 8 caractères avant de hacher.
+**Correction (L20-27)** — `password_hash($p, PASSWORD_BCRYPT)` + validation longueur minimale 8 caractères.
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
 
 ---
 
 ## admin.php
 
-### Faille 1 (L6) — Contrôle d'accès cassé (OWASP A01:2021)
+### Faille 1 — Contrôle d'accès cassé — A01:2021
 
-L'ancien code affichait un message d'erreur si l'utilisateur n'était pas admin, mais continuait l'exécution quand même. N'importe qui pouvait donc envoyer des requêtes POST pour exécuter les actions d'administration.
+L'ancien code affichait un message d'erreur mais continuait l'exécution. N'importe qui pouvait POST les actions admin.
 
-**Correction (L17-20)** : ajout d'un `exit` après le message d'erreur + inclusion de footer.php pour ne pas laisser la page se charger partiellement. Le script s'arrête pour de vrai si ce n'est pas un admin.
+**Correction (L17-20)** — `exit` après le message d'erreur + inclusion footer.php. Le script s'arrête vraiment.
 
-### Faille 2 (L31) — Injection SQL dans toutes les actions admin (OWASP A03:2021)
+Réf. OWASP : https://owasp.org/Top10/A01_2021-Broken_Access_Control/
 
-Chaque action (`delete_user`, `set_role`, `delete_product`, `delete_review`, `add_balance`) insérait les variables directement dans les requêtes SQL sans aucune validation.
+### Faille 2 — Injection SQL dans toutes les actions admin — A03:2021
+
+Toutes les actions injectaient les variables directement dans les requêtes.
 
 **Correction** :
-- `delete_user` (L35-38) : `intval()` sur l'ID + requête préparée
-- `set_role` (L44-48) : `intval()` + liste blanche sur `$role` (`['user', 'admin']`) + requête préparée
+- `delete_user` (L35-38) : `intval()` + requête préparée
+- `set_role` (L44-48) : `intval()` + liste blanche `['user', 'admin']` + requête préparée
 - `delete_product` (L52-54) : `intval()` + requête préparée
 - `delete_review` (L57-59) : `intval()` + requête préparée
 - `add_balance` (L63-67) : `intval()` + `floatval()` + requête préparée
 
-### Faille 3 (L99) — Hash MD5 des mots de passe affiché dans le tableau HTML (OWASP A02:2021)
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-Le tableau des utilisateurs affichait la colonne `password` contenant les hashs MD5. Même si un hash n'est pas le mot de passe en clair, afficher les hashs MD5 dans l'interface facilite leur cassage hors ligne.
+### Faille 3 — Hash MD5 affiché dans le tableau HTML — A02:2021
 
-**Correction** : la colonne `password` a été retirée du tableau HTML. Un admin n'a aucune raison légitime de voir les hashs.
+La colonne `password` était affichée dans l'interface admin. Un hash MD5 se craque hors ligne en quelques secondes : l'exposer dans une UI accélère l'attaque.
 
-### Faille 4 (L162) — XSS stocké dans les avis (OWASP A03:2021)
+**Correction** — Colonne `password` retirée du tableau.
 
-`<?= $rv['content'] ?>` affichait le contenu des avis sans échappement. Un avis contenant `<script>` s'exécutait dans le navigateur de l'admin qui consultait ce tableau de bord, permettant de voler sa session.
+Réf. OWASP : https://owasp.org/Top10/A02_2021-Cryptographic_Failures/
 
-**Correction (L167)** : `echo htmlspecialchars($rv['content'], ENT_QUOTES, 'UTF-8')`. Tous les caractères spéciaux HTML sont neutralisés avant l'affichage.
+### Faille 4 — XSS stocké dans les avis — A03:2021
+
+`<?= $rv['content'] ?>` sans échappement. Un avis avec `<script>` vole la session de l'admin qui consulte le dashboard.
+
+**Correction (L167)** — `echo htmlspecialchars($rv['content'], ENT_QUOTES, 'UTF-8')`.
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 
 ---
 
 ## api.php
 
-### Faille 1 (L5) — API entière sans authentification (OWASP A01:2021)
+### Faille 1 — API entière sans authentification — A01:2021
 
-Toutes les actions de l'API étaient accessibles sans être connecté. N'importe qui pouvait lire les données des utilisateurs, faire des virements, supprimer des avis.
+Aucune session, aucune vérification. Lecture des hashs, virements, suppression d'avis : tout était ouvert.
 
-**Correction (L13)** : ajout de `secure_session_start()` en haut du fichier. Chaque action qui nécessite une authentification vérifie maintenant `$me` (la session) avant de continuer.
+**Correction (L13)** — `secure_session_start()` en tête de fichier. Chaque action sensible vérifie ensuite `$me` avant d'agir.
 
-### Faille 2 (L27) — Injection SQL dans la recherche (OWASP A03:2021)
+Réf. OWASP : https://owasp.org/Top10/A01_2021-Broken_Access_Control/
 
-`$q` était inséré directement dans la requête `LIKE '%$q%'`. Une attaque UNION permettait de lire n'importe quelle table, notamment les hashs de mots de passe, sans être connecté.
+### Faille 2 — Injection SQL dans la recherche — A03:2021
 
-**Correction (L36-38)** : requête préparée avec `?` + SELECT limité aux colonnes utiles (plus de `SELECT *` qui exposait potentiellement d'autres données).
+`$q` injecté dans `LIKE '%$q%'`. Une attaque UNION permettait de lire la table `users` (hashs MD5) sans être connecté.
 
-### Faille 3 (L47) — Injection SQL + exposition de données sensibles (OWASP A03:2021)
+**Correction (L36-38)** — Requête préparée + `SELECT` limité aux colonnes utiles, plus de `SELECT *`.
 
-`$id` était inséré directement dans la requête. De plus, `SELECT *` retournait le hash MD5 du mot de passe dans la réponse JSON.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-**Correction (L59-61)** : `intval($id)` + requête préparée + `SELECT id, username, role` uniquement, sans le mot de passe ni les données financières.
+### Faille 3 — Injection SQL + exposition de données sensibles sur /user — A03:2021
 
-### Faille 4 (L65) — Exposition de tous les hashs sans authentification (OWASP A02:2021 + A01:2021)
+`$id` injecté directement + `SELECT *` retournait le hash MD5 dans la réponse JSON.
 
-`SELECT *` sur la table `users` retournait les hashs MD5 de tous les comptes sans aucune vérification d'identité.
+**Correction (L59-61)** — `intval($id)` + requête préparée + `SELECT id, username, role` uniquement.
 
-**Correction (L70-74)** : vérification de connexion + vérification du rôle admin + `SELECT id, username, email, role, balance` sans `password`.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-### Faille 5 (L83) — Injection SQL + IDOR sur les commandes (OWASP A03:2021 + A01:2021)
+### Faille 4 — Dump de tous les hashs sans auth — A02:2021 + A01:2021
 
-N'importe qui pouvait voir les commandes de n'importe quel utilisateur en passant n'importe quel `uid`.
+`SELECT *` sur `users` retournait tous les hashs MD5 à n'importe qui.
 
-**Correction (L89-94)** : vérification de connexion + vérification que `$me['id'] === $uid` (sauf pour les admins) + `intval()` + requête préparée.
+**Correction (L70-74)** — Vérification connexion + rôle admin + `SELECT id, username, email, role, balance` (sans `password`).
 
-### Faille 6 (L104) — Virement d'argent sans authentification (OWASP A01:2021)
+Réf. OWASP : https://owasp.org/Top10/A01_2021-Broken_Access_Control/
 
-N'importe qui pouvait virer de l'argent entre n'importe quels comptes avec un simple POST.
+### Faille 5 — IDOR sur les commandes — A01:2021 + A03:2021
 
-**Correction (L113-126)** : vérification de connexion + vérification du rôle admin + vérification du token CSRF (`hash_equals`) + `intval()` et `floatval()` sur les IDs et le montant + requêtes préparées.
+N'importe qui pouvait lire les commandes de n'importe quel user en passant l'uid de son choix.
 
-### Faille 7 (L135) — Suppression d'avis sans authentification (OWASP A01:2021)
+**Correction (L89-94)** — Vérification connexion + `$me['id'] === $uid` (sauf admins) + `intval()` + requête préparée.
 
-N'importe qui pouvait supprimer tous les avis d'un produit.
+Réf. OWASP : https://owasp.org/www-community/attacks/Insecure_Direct_Object_Reference
 
-**Correction (L141-143)** : vérification de connexion + vérification du rôle admin + `intval()` + requête préparée.
+### Faille 6 — Virement sans authentification — A01:2021
 
-### Faille 8 (L150) — Endpoint `raw_query` : exécution directe de SQL brut (OWASP A03:2021)
+POST sur /transfer sans être connecté = virement entre n'importe quels comptes.
 
-C'était l'équivalent d'un accès direct à la base de données pour tout le monde. On pouvait envoyer `?action=raw_query&sql=DROP TABLE users` depuis n'importe quel navigateur.
+**Correction (L113-126)** — Vérification connexion + rôle admin + token CSRF via `hash_equals()` (protection timing attack) + `intval()`/`floatval()` + requêtes préparées.
 
-**Correction** : l'endpoint a été complètement supprimé. Le code commenté est conservé en L157-164 pour montrer ce qui existait.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+
+### Faille 7 — Suppression d'avis sans auth — A01:2021
+
+DELETE sur les avis d'un produit ouvert à tous.
+
+**Correction (L141-143)** — Vérification connexion + rôle admin + `intval()` + requête préparée.
+
+Réf. OWASP : https://owasp.org/Top10/A01_2021-Broken_Access_Control/
+
+### Faille 8 — Endpoint raw_query : SQL brut exécutable par tous — A03:2021
+
+`?action=raw_query&sql=DROP TABLE users` fonctionnait depuis n'importe quel navigateur. Accès direct à la BDD pour tout le monde.
+
+**Correction** — Endpoint supprimé. Pour déboguer une BDD en dev, utiliser DBeaver ou DB Browser en local.
+
+Ancien code conservé en commentaire (L157-164) à titre pédagogique.
+
+Réf. OWASP : https://owasp.org/Top10/A03_2021-Injection/
 
 ---
 
 ## profile.php
 
-### Faille 1 (L8) — IDOR + Injection SQL via `$uid` (OWASP A01:2021 + A03:2021)
+### Faille 1 — Injection SQL via $uid — A03:2021
 
-`$uid` venait de `$_GET` sans validation. Un attaquant pouvait accéder au profil de n'importe qui en devinant un ID, et en plus injecter du SQL.
+`$uid` venait de `$_GET` et était collé directement dans la requête.
 
-**Correction (L15-18)** : `intval($_GET['uid'])` + requête préparée. Plus possible d'injecter, et les IDs sont forcément des entiers.
+Note : la consultation d'un profil par uid reste publique par design (feature normale). Ce qui est protégé, c'est l'écriture : update/password/delete sont restreints au propriétaire via `$is_own`. La vraie faille ici, c'est l'injection SQL.
 
-### Faille 2 (L35) — Injection SQL en UPDATE (OWASP A03:2021)
+**Correction (L17-21)** — `intval($_GET['uid'])` + requête préparée.
 
-En mettant `', role='admin' WHERE id=1--` dans le champ bio, la requête était détournée pour modifier le rôle de n'importe quel compte.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-**Correction (L46)** : requête préparée avec `?` pour bio, email et l'ID. Les valeurs ne sont plus jamais interprétées comme du SQL.
+### Faille 2 — Injection SQL en UPDATE — A03:2021
 
-### Faille 3 (L52) — Mot de passe haché avec MD5 lors du changement (OWASP A02:2021)
+Mettre `', role='admin' WHERE id=1--` dans le champ bio suffisait pour devenir admin.
 
-Le changement de mot de passe utilisait `md5()` comme les autres failles, et acceptait des mots de passe de 4 caractères minimum seulement.
+**Correction (L46)** — Requête préparée avec `?` pour bio, email et l'ID.
 
-**Correction (L55-61)** : `password_hash($np, PASSWORD_BCRYPT)` + longueur minimum portée à 8 caractères + requête préparée.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-### Faille 4 (L97) — XSS stocké dans la bio (OWASP A03:2021)
+### Faille 3 — MD5 sur le changement de mot de passe — A02:2021
 
-`<?= $user['bio'] ?>` affichait la bio sans échappement. Un script sauvegardé en bio s'exécutait dans le navigateur de tout visiteur du profil.
+`md5()` + minimum 4 caractères seulement.
 
-**Correction (L101-103)** : `echo htmlspecialchars($user['bio'], ENT_QUOTES, 'UTF-8')`.
+**Correction (L55-61)** — `password_hash($np, PASSWORD_BCRYPT)` + minimum 8 caractères + requête préparée.
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html
+
+### Faille 4 — XSS stocké dans la bio — A03:2021
+
+`<?= $user['bio'] ?>` sans échappement. Un script en bio s'exécute chez chaque visiteur du profil.
+
+**Correction (L101-103)** — `echo htmlspecialchars($user['bio'], ENT_QUOTES, 'UTF-8')`.
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 
 ---
 
 ## messages.php
 
-### Faille 1 (L15) — Injection SQL dans la recherche du destinataire (OWASP A03:2021)
+### Faille 1 — Injection SQL sur le destinataire + inbox/sent — A03:2021
 
-`$to_name` inséré directement permettait une attaque UNION pour lire d'autres tables en envoyant un message à un destinataire forgé.
+`$to_name` injecté directement → attaque UNION possible. Les requêtes inbox et sent utilisaient aussi `$me['id']` dans des requêtes dynamiques.
 
-**Correction (L22-24)** : requête préparée avec `?` pour le username du destinataire.
+**Correction (L22-24)** — Requête préparée pour le destinataire. Les deux requêtes inbox (L31-39) et sent (L43-51) sont aussi préparées avec `execute([$me['id']])`.
 
-Les requêtes inbox (L31-39) et sent (L43-51) utilisaient aussi `$me['id']` directement dans des requêtes dynamiques.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-**Correction** : les deux requêtes sont maintenant des requêtes préparées avec `execute([$me['id']])`.
+### Faille 2 — XSS stocké dans les messages — A03:2021
 
-### Faille 2 (L82) — XSS stocké dans les messages (OWASP A03:2021)
+`<?= $m['content'] ?>` sans échappement dans l'inbox et les envoyés. Un message avec du JS s'exécute chez le destinataire. Si c'est un admin, l'attaquant obtient sa session.
 
-`<?= $m['content'] ?>` affichait le contenu des messages sans échappement dans l'inbox et les messages envoyés. Un message contenant du JavaScript s'exécutait chez le destinataire. Si la victime est admin, l'attaquant obtient un accès total.
+**Correction (L86 et L107)** — `echo htmlspecialchars($m['content'], ENT_QUOTES, 'UTF-8')` dans les deux boucles.
 
-**Correction (L86 et L107)** : `echo htmlspecialchars($m['content'], ENT_QUOTES, 'UTF-8')` dans les deux boucles d'affichage.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 
 ---
 
 ## product.php
 
-### Faille 1 (L7) — Injection SQL via l'ID du produit (OWASP A03:2021)
+### Faille 1 — Injection SQL via l'ID produit — A03:2021
 
-`$id` venait directement de `$_GET` et était inséré brut dans la requête. Une attaque UNION permettait de lire d'autres tables.
+`$id` de `$_GET` injecté brut dans la requête. UNION possible pour lire d'autres tables.
 
-**Correction (L14-22)** : `intval($_GET['id'])` + requête préparée.
+**Correction (L14-22)** — `intval($_GET['id'])` + requête préparée.
 
-### Faille 2 (L41) — Injection SQL via le code promo (OWASP A03:2021)
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-En saisissant `' OR '1'='1` comme code promo, la condition devenait toujours vraie et on obtenait une réduction sans code valide.
+### Faille 2 — Injection SQL via le code promo — A03:2021
 
-**Correction (L50-55)** : requête préparée + `execute([$coupon])`. La mise à jour du coupons (marquer comme utilisé) est aussi préparée.
+Saisir `' OR '1'='1` comme code promo = réduction garantie sans code valide.
 
-### Faille 3 (L66) — Injection SQL dans les UPDATE de solde et stock (OWASP A03:2021)
+**Correction (L50-55)** — Requête préparée pour la vérification + requête préparée pour marquer le coupon utilisé.
 
-`$total`, `$me['id']`, `$qty` et `$id` étaient insérés directement dans les requêtes UPDATE.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-**Correction (L72-75)** : deux requêtes préparées pour déduire le solde et le stock.
+### Faille 3 — Injection SQL dans les UPDATE solde/stock — A03:2021
 
-### Faille 4 (L146) — XSS stocké dans les avis (OWASP A03:2021)
+`$total`, `$me['id']`, `$qty` et `$id` injectés directement dans les UPDATE.
 
-`<?= $rv['content'] ?>` affichait le contenu des avis sans échappement. Un script dans un avis s'exécutait chez chaque visiteur de la page produit.
+**Correction (L72-75)** — Deux requêtes préparées séparées pour déduire le solde et le stock.
 
-**Correction (L150)** : `echo htmlspecialchars($rv['content'], ENT_QUOTES, 'UTF-8')`.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+
+### Faille 4 — XSS stocké dans les avis — A03:2021
+
+`<?= $rv['content'] ?>` sans échappement. Un script en avis s'exécute chez chaque visiteur de la page produit.
+
+**Correction (L150)** — `echo htmlspecialchars($rv['content'], ENT_QUOTES, 'UTF-8')`.
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 
 ---
 
 ## search.php
 
-### Faille 1 (L11) — Injection SQL dans la clause WHERE (OWASP A03:2021)
+### Faille 1 — Injection SQL dans le WHERE — A03:2021
 
-`$q` inséré directement dans le `LIKE '%$q%'` permettait une attaque UNION pour récupérer les données de n'importe quelle table, y compris les mots de passe.
+`$q` injecté dans `LIKE '%$q%'`. Attaque UNION pour lire `users` et récupérer les mots de passe.
 
-**Correction (L36-40)** : requête préparée avec deux `?` pour les deux clauses LIKE.
+**Correction (L36-40)** — Requête préparée avec deux `?` pour les deux clauses LIKE.
 
-### Faille 2 (L16) — Injection SQL dans ORDER BY (OWASP A03:2021)
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
 
-`ORDER BY $sort` est un cas particulier : les requêtes préparées ne protègent pas les noms de colonnes. `$sort` contrôlé par l'utilisateur permettait d'injecter du SQL dans la clause ORDER BY.
+### Faille 2 — Injection SQL dans ORDER BY — A03:2021
 
-**Correction (L30-33)** : liste blanche `['name', 'price']`. Si `$sort` ne fait pas partie de la liste, il est remplacé par `name`. La valeur validée est ensuite insérée directement dans la chaîne de requête (seule solution acceptable ici puisqu'on ne peut pas paramétrer un nom de colonne).
+`ORDER BY $sort` : les requêtes préparées ne protègent pas les noms de colonnes. `$sort` contrôlé par l'utilisateur = injection dans ORDER BY.
 
-### Faille 3 (L50) — XSS réfléchi sur le terme de recherche (OWASP A03:2021)
+**Correction (L30-33)** — Liste blanche `['name', 'price']`. Si `$sort` n'est pas dedans, on force `name`. On insère ensuite la valeur validée directement dans la chaîne (seule option possible pour un nom de colonne).
 
-`value="<?= $q ?>"` et l'affichage du terme recherché (`<?= $q ?>`) n'étaient pas échappés. En forgeant un lien avec un script dans `$q`, le JavaScript s'exécutait chez la victime qui cliquait dessus.
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Query_Parameterization_Cheat_Sheet.html
 
-**Correction (L57 et L63)** : `htmlspecialchars($q, ENT_QUOTES, 'UTF-8')` dans l'attribut `value` et dans le texte de résultats.
+### Faille 3 — XSS réfléchi sur le terme de recherche — A03:2021
+
+`value="<?= $q ?>"` et `<?= $q ?>` non échappés. Forger un lien avec un script dans `$q` = JS exécuté chez la victime qui clique.
+
+**Correction (L57 et L63)** — `htmlspecialchars($q, ENT_QUOTES, 'UTF-8')` dans l'attribut `value` et dans le texte de résultats.
+
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
 
 ---
 
 ## sell.php
 
-### Faille 1 (L23) — Upload de fichier arbitraire (OWASP A04:2021)
-Ce fichier a été reconstruit après avoir été considéré comme une backdoor par mon système d'exploitation.
-Le code original utilisait `$_FILES['image']['name']` directement comme nom de fichier sans aucune validation. Un attaquant pouvait uploader `shell.php` et l'exécuter via `/uploads/shell.php` pour prendre le contrôle du serveur (Remote Code Execution).
+### Faille 1 — Upload de fichier arbitraire — A04:2021
+
+`$_FILES['image']['name']` utilisé directement comme nom de fichier, sans aucune validation. Uploader `shell.php` puis appeler `/uploads/shell.php` = RCE (Remote Code Execution).
 
 **Correction (L32-57)** :
-- Limite de taille à 2 Mo
-- Vérification de l'extension (liste blanche : jpg, jpeg, png, gif, webp)
-- Vérification du type MIME réel du fichier avec `finfo` (pas seulement l'extension déclarée)
-- Génération d'un nom de fichier aléatoire avec `bin2hex(random_bytes(16))` : l'utilisateur n'a aucun contrôle sur le nom final, impossible de placer un fichier à un emplacement prévisible
+- Limite taille à 2 Mo
+- Liste blanche sur l'extension : jpg, jpeg, png, gif, webp
+- Vérification du type MIME réel avec `finfo` (pas juste l'extension déclarée)
+- Nom de fichier généré aléatoirement avec `bin2hex(random_bytes(16))` : zéro contrôle côté utilisateur sur le nom final
+- Création automatique du dossier `/uploads/` avec `mkdir()` s'il n'existe pas (permissions 755)
 
-### Faille 2 (L71) — Injection SQL + IDOR sur la suppression de produit (OWASP A03:2021 + A01:2021)
+Réf. OWASP : https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
 
-`$pid` était inséré directement dans la requête, et surtout il n'y avait aucune vérification que le produit appartenait au vendeur connecté. N'importe quel vendeur pouvait supprimer les produits des autres.
+### Faille 2 — Injection SQL + IDOR sur la suppression — A03:2021 + A01:2021
 
-**Correction (L79-81)** : `intval($pid)` + requête préparée + condition `AND seller_id=?` avec l'ID du vendeur connecté. Si le produit n'appartient pas à ce vendeur, la requête ne supprime rien.
+`$pid` injecté directement + aucune vérification que le produit appartient au vendeur connecté. N'importe quel vendeur pouvait supprimer les produits des autres.
 
-### Faille 3 (L89) — Injection SQL + IDOR sur la mise à jour du prix (OWASP A03:2021 + A01:2021)
+**Correction (L79-81)** — `intval($pid)` + requête préparée + `AND seller_id=?`. Si le produit n'appartient pas au vendeur, la requête ne supprime rien.
 
-Même double faille que la suppression : `$newprice` et `$pid` insérés directement, sans vérification de propriété.
+Réf. OWASP : https://owasp.org/www-community/attacks/Insecure_Direct_Object_Reference
 
-**Correction (L97-101)** : `intval($pid)` + `floatval($newprice)` + requête préparée + condition `AND seller_id=?`. Validation supplémentaire : le nouveau prix doit être strictement positif.
+### Faille 3 — Injection SQL + IDOR sur la mise à jour du prix — A03:2021 + A01:2021
+
+Même double faille que la suppression.
+
+**Correction (L97-101)** — `intval($pid)` + `floatval($newprice)` + requête préparée + `AND seller_id=?` + validation prix strictement positif.
+
+Réf. OWASP : https://owasp.org/www-community/attacks/Insecure_Direct_Object_Reference
 
 ---
 
-## Résumé des catégories OWASP corrigées
+## Résumé OWASP
 
-| Catégorie OWASP | Description | Fichiers concernés |
-|---|---|---|
-| A01:2021 — Broken Access Control | Contrôle d'accès cassé, IDOR, absence d'auth | admin.php, api.php, profile.php, sell.php |
-| A02:2021 — Cryptographic Failures | MD5 pour les mots de passe | init.php, login.php, register.php, profile.php, admin.php |
-| A03:2021 — Injection | Injection SQL, XSS stocké, XSS réfléchi | Tous les fichiers |
-| A04:2021 — Insecure Design | Upload de fichier sans validation | sell.php |
-| A07:2021 — Auth Failures | Session sans options de sécurité, credentials en dur | header.php, logout.php, init.php, login.php |
+| Catégorie | Fichiers |
+|---|---|
+| A01:2021 — Broken Access Control | admin.php, api.php, profile.php, sell.php, messages.php |
+| A02:2021 — Cryptographic Failures | init.php, login.php, register.php, profile.php, admin.php |
+| A03:2021 — Injection (SQL + XSS) | Tous les fichiers |
+| A04:2021 — Insecure Design | sell.php |
+| A07:2021 — Auth Failures | header.php, logout.php, init.php, login.php |

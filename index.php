@@ -13,7 +13,7 @@ $products = db()->query("SELECT p.*, u.username as seller FROM products p JOIN u
       <p style="font-size:13px;color:#666;margin-bottom:8px"><?= htmlspecialchars($p['description']) ?></p>
       <div class="price"><?= number_format($p['price'],2) ?> €</div>
       <p class="meta">Stock : <?= $p['stock'] ?> — Vendeur : <?= htmlspecialchars($p['seller']) ?></p>
-      <a href="product.php?id=<?= $p['id'] ?>" class="btn btn-sm" style="margin-top:10px">Voir →</a>
+      <a href="product.php?id=<?= intval($p['id']) ?>" class="btn btn-sm" style="margin-top:10px">Voir →</a>
     </div>
     <?php endforeach; ?>
   </div>
