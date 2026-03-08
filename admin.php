@@ -98,7 +98,7 @@ $reviews  = $db->query("SELECT r.*, u.username, p.name as product_name FROM revi
       <?php
       // FAILLE 3 : Hashs MD5 des mots de passe affiches dans le HTML (OWASP A02:2021)
       // Afficher les hashs dans l'interface facilite leur craquage. Colonne supprimee.
-      // Ancien code vulnerable : <td><?= $u['password'] ?></td>
+      // Ancien code vulnerable : <td>echo $u['password'];</td>
       ?>
       <td style="display:flex;gap:6px;flex-wrap:wrap">
         <form method="POST" style="margin:0;display:flex;gap:4px">
@@ -160,9 +160,9 @@ $reviews  = $db->query("SELECT r.*, u.username, p.name as product_name FROM revi
       <td>
         <?php
         // FAILLE 4 : XSS stocke dans les avis (OWASP A03:2021 - Stored XSS)
-        // <?= $rv['content'] ?> sans echappement : un avis malveillant pouvait voler
+        // echo $rv['content']; sans echappement : un avis malveillant pouvait voler
         // la session de l'admin qui consulte ce tableau de bord.
-        // Ancien code vulnerable : <?= $rv['content'] ?>
+        // Ancien code vulnerable : echo $rv['content'];
         echo htmlspecialchars($rv['content'], ENT_QUOTES, 'UTF-8');
         ?>
       </td>

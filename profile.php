@@ -98,11 +98,11 @@ $orders = $stmt->fetchAll(PDO::FETCH_ASSOC);
   <div style="background:#f8f8f8;padding:10px;border-radius:5px;margin-top:6px">
     <?php
     // FAILLE 4 : XSS stocke dans la bio (OWASP A03:2021 - Stored XSS)
-    // <?= $user['bio'] ?> affichait le contenu sans echappement. Un script sauvegarde
+    // echo $user['bio']; affichait le contenu sans echappement. Un script sauvegarde
     // en bio s'executait dans le navigateur de tout visiteur du profil.
     // Source OWASP : https://owasp.org/www-community/attacks/xss/#stored-xss-attacks
     //
-    // Ancien code vulnerable : <?= $user['bio'] ?: '<em>Aucune bio.</em>' ?>
+    // Ancien code vulnerable : echo $user['bio'] ?: '<em>Aucune bio.</em>';
     if ($user['bio']) {
         echo htmlspecialchars($user['bio'], ENT_QUOTES, 'UTF-8');
     } else {

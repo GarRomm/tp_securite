@@ -147,7 +147,7 @@ $avg = count($reviews) ? round(array_sum(array_column($reviews,'rating')) / coun
       // Un avis contenant du JavaScript s'executait dans le navigateur de chaque visiteur.
       // Source OWASP : https://owasp.org/www-community/attacks/xss/#stored-xss-attacks
       //
-      // Ancien code vulnerable : <?= $rv['content'] ?>
+      // Ancien code vulnerable : echo $rv['content'];
       echo htmlspecialchars($rv['content'], ENT_QUOTES, 'UTF-8');
       ?>
     </div>

@@ -84,7 +84,7 @@ $sent = $stmt_sent->fetchAll(PDO::FETCH_ASSOC);
       // de voler sa session. Si la victime est admin, l'attaquant obtient un acces total.
       // Source OWASP : https://owasp.org/www-community/attacks/xss/#stored-xss-attacks
       //
-      // Ancien code vulnerable : <?= $m['content'] ?>
+      // Ancien code vulnerable : echo $m['content'];
       echo htmlspecialchars($m['content'], ENT_QUOTES, 'UTF-8');
       ?>
     </div>
@@ -101,7 +101,7 @@ $sent = $stmt_sent->fetchAll(PDO::FETCH_ASSOC);
     <div style="margin-top:6px">
       <?php
       // Meme faille XSS stocke que ci-dessus.
-      // Ancien code vulnerable : <?= $m['content'] ?>
+      // Ancien code vulnerable : echo $m['content'];
       echo htmlspecialchars($m['content'], ENT_QUOTES, 'UTF-8');
       ?>
     </div>

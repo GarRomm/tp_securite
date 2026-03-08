@@ -48,11 +48,11 @@ if ($q !== '') {
     <div style="display:flex;gap:10px;margin-bottom:14px">
       <?php
       // FAILLE 3 : XSS reflechi sur l'affichage du terme de recherche (OWASP A03:2021)
-      // <?= $q ?> et value="<?= $q ?>" affichent la valeur sans echappement.
+      // echo $q; et value="echo $q;" affichent la valeur sans echappement.
       // En forgant un lien avec un script dans $q, le JS s'execute chez la victime.
       // Source OWASP : https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
       //
-      // Ancien code vulnerable : value="<?= $q ?>"
+      // Ancien code vulnerable : value="echo $q;"
       ?>
       <input type="text" name="q" value="<?= htmlspecialchars($q, ENT_QUOTES, 'UTF-8') ?>" placeholder="Rechercher un produit..." style="margin:0">
       <select name="sort" style="width:auto;margin:0">
