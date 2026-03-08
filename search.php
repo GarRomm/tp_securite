@@ -73,7 +73,7 @@ if ($q !== '') {
       <div class="product-card">
         <h2><?= htmlspecialchars($p['name']) ?></h2>
         <div class="price"><?= number_format($p['price'],2) ?> EUR</div>
-        <a href="product.php?id=<?= $p['id'] ?>" class="btn btn-sm">Voir</a>
+        <a href="product.php?id=<?= intval($p['id']) ?>" class="btn btn-sm">Voir</a>
       </div>
       <?php endforeach; ?>
     </div>
